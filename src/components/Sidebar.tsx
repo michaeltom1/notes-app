@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, type JSX } from 'react';
 import { Notebook, Star, Trash2, Folder, Plus, Edit, XCircle, MoreVertical } from 'lucide-react';
 import type { Category } from '../types/category';
 
@@ -76,6 +76,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [hoveredCategoryId, setHoveredCategoryId] = useState<string | null>(null); // New state for hover
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState<string>("");
 
   // --- CONTEXT MENU HANDLERS ---
  const handleMenuClick = (e: React.MouseEvent, categoryId: string) => {
@@ -110,6 +112,23 @@ const Sidebar: React.FC<SidebarProps> = ({
       onAssignCategory(noteId, categoryId);
     }
     setDropTargetId(null);
+  };
+
+  const handleRenameSubmit = () => {
+    if (editingCategoryId && editingCategoryName.trim() !== "") {
+      onRenameCategory(editingCategoryId, editingCategoryName);
+    }
+    setEditingCategoryId(null);
+    setEditingCategoryName("");
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleRenameSubmit();
+    } else if (e.key === 'Escape') {
+      setEditingCategoryId(null);
+      setEditingCategoryName("");
+    }
   };
   
   const filters: { name: Filter; icon: JSX.Element }[] = [
@@ -156,27 +175,46 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
         <ul className="flex-grow overflow-y-auto">
           {categories.map((category) => (
-<li 
+            <li 
               key={category.id}
               onMouseEnter={() => setHoveredCategoryId(category.id)}
               onMouseLeave={() => setHoveredCategoryId(null)}
             >
               <a
                 href="#"
-                onClick={(e) => { e.preventDefault(); onSelectCategory(category.id); }}
-                // REMOVED: onContextMenu handler is gone
+                onClick={(e) => { 
+                  if (editingCategoryId !== category.id) {
+                    e.preventDefault(); 
+                    onSelectCategory(category.id);
+                  }
+                }}
                 onDragOver={(e) => handleDragOver(e, category.id)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, category.id)}
-                className={`flex items-center justify-between px-6 py-2 text-md hover:bg-gray-700 rounded-r-full mr-2 ...`}
+                className={`flex items-center justify-between px-6 py-2 text-md hover:bg-gray-700 rounded-r-full mr-2 transition-colors duration-200 ${
+                  activeCategoryId === category.id && !editingCategoryId ? 'bg-gray-600 text-white' : ''
+                } ${
+                  dropTargetId === category.id ? 'bg-blue-800' : ''
+                }`}
               >
-                <div className="flex items-center truncate">
+                <div className="flex items-center truncate w-full">
                   <Folder size={16} className="mr-3 flex-shrink-0" />
-                  <span className="truncate">{category.name}</span>
+                  {editingCategoryId === category.id ? (
+                    <input
+                      type="text"
+                      value={editingCategoryName}
+                      onChange={(e) => setEditingCategoryName(e.target.value)}
+                      onBlur={handleRenameSubmit}
+                      onKeyDown={handleRenameKeyDown}
+                      autoFocus
+                      className="bg-transparent text-white outline-none border-b border-gray-500 w-full"
+                    />
+                  ) : (
+                    <span className="truncate">{category.name}</span>
+                  )}
                 </div>
 
-                {/* --- ADDED: Conditionally rendered 3-dot menu button --- */}
-                {hoveredCategoryId === category.id && (
+                {hoveredCategoryId === category.id && !editingCategoryId && (
                   <button 
                     onClick={(e) => handleMenuClick(e, category.id)}
                     className="p-1 rounded-full hover:bg-gray-500"
@@ -198,14 +236,13 @@ const Sidebar: React.FC<SidebarProps> = ({
           onClick={(e) => e.stopPropagation()} // Prevent clicks inside menu from closing it
         >
           <button
-            // --- FIXED: Pre-fills prompt with current name ---
             onClick={() => {
               const currentCategory = categories.find(c => c.id === contextMenu.categoryId);
-              const newName = prompt("Enter new category name:", currentCategory?.name || "");
-              if (newName) {
-                onRenameCategory(contextMenu.categoryId, newName);
+              if (currentCategory) {
+                setEditingCategoryId(currentCategory.id);
+                setEditingCategoryName(currentCategory.name);
               }
-              closeContextMenu(); // Close menu after action
+              closeContextMenu(); // Close menu to begin editing
             }}
             className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
           >
@@ -228,7 +265,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div
         role="separator"
         aria-orientation="vertical"
-        className="absolute top-0 right-0 h-full w-2 cursor-col-resize bg-gray-600 hover:bg-blue-500 transition-colors duration-200 opacity-50 hover:opacity-100"
+        className="absolute top-0 right-0 h-full w-0.5 cursor-col-resize bg-gray-600 hover:bg-blue-500 transition-colors duration-200 opacity-50 hover:opacity-100"
         onMouseDown={handleMouseDown}
       />
     </nav>

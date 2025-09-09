@@ -1,18 +1,31 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { Note } from '../types/note';
-import type { Filter } from './Sidebar'; // This type is now defined in Sidebar.tsx
-import { Plus, Search, Eraser } from 'lucide-react';
+import type { Filter } from './Sidebar';
+import type { Category } from '../types/category';
+import { Plus, Search, Eraser, Star, MoreVertical, Edit, Trash2 } from 'lucide-react';
+
+// State type for the context menu
+type ContextMenu = {
+  visible: boolean;
+  x: number;
+  y: number;
+  note: Note;
+} | null;
 
 interface NoteListProps {
   notes: Note[];
   onSelectNote: (id: string) => void;
   onNewNote: () => void;
   activeNoteId: string | null;
-  activeCategory: Filter; // This prop receives the active filter ('Notes', 'Trash', etc.)
+  activeCategory: Filter;
   onEmptyTrash: () => void;
   initialWidth: number;
   minWidth?: number;
   maxWidth?: number;
+  categories: Category[];
+  onUpdateNote: (updatedNote: Note) => void;
+  onDeleteNote: (id: string) => void;
+  onPermanentlyDelete: (id: string) => void;
 }
 
 const NoteList: React.FC<NoteListProps> = ({
@@ -25,26 +38,60 @@ const NoteList: React.FC<NoteListProps> = ({
   initialWidth,
   minWidth = 250,
   maxWidth = 600,
+  categories,
+  onUpdateNote,
+  onDeleteNote,
+  onPermanentlyDelete,
 }) => {
-  // --- RESIZING LOGIC ---
+  // --- STATE MANAGEMENT ---
   const [width, setWidth] = useState(initialWidth);
   const isResizing = useRef(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
+  const [hoveredNoteId, setHoveredNoteId] = useState<string | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteTitle, setEditingNoteTitle] = useState<string>("");
 
+  // --- HANDLERS ---
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     isResizing.current = true;
   };
-
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (isResizing.current) {
       setWidth((prevWidth) => Math.max(minWidth, Math.min(prevWidth + e.movementX, maxWidth)));
     }
   }, [minWidth, maxWidth]);
+  const handleMouseUp = useCallback(() => { isResizing.current = false; }, []);
+  const handleDragStart = (e: React.DragEvent, noteId: string) => e.dataTransfer.setData("noteId", noteId);
 
-  const handleMouseUp = useCallback(() => {
-    isResizing.current = false;
-  }, []);
+  const handleMenuClick = (e: React.MouseEvent, note: Note) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setContextMenu({ visible: true, x: rect.left, y: rect.bottom, note });
+  };
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  const handleRenameSubmit = () => {
+    if (!editingNoteId) return;
+    const noteToUpdate = notes.find(n => n.id === editingNoteId);
+    if (noteToUpdate && editingNoteTitle.trim() !== "") {
+      onUpdateNote({ ...noteToUpdate, title: editingNoteTitle.trim() });
+    }
+    setEditingNoteId(null);
+    setEditingNoteTitle("");
+  };
   
+  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') handleRenameSubmit();
+    else if (e.key === 'Escape') {
+      setEditingNoteId(null);
+      setEditingNoteTitle("");
+    }
+  };
+
+  // --- EFFECTS ---
   useEffect(() => {
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
@@ -53,14 +100,11 @@ const NoteList: React.FC<NoteListProps> = ({
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [handleMouseMove, handleMouseUp]);
-  // --- END RESIZING LOGIC ---
 
-  // --- DRAG-AND-DROP LOGIC ---
-  const handleDragStart = (e: React.DragEvent, noteId: string) => {
-    // This sets the data that will be available when the item is dropped
-    e.dataTransfer.setData("noteId", noteId);
-  };
-  // --- END DRAG-AND-DROP LOGIC ---
+  useEffect(() => {
+    window.addEventListener('click', closeContextMenu);
+    return () => window.removeEventListener('click', closeContextMenu);
+  }, [closeContextMenu]);
 
   const sortedNotes = [...notes].sort((a, b) => b.lastModified - a.lastModified);
 
@@ -75,10 +119,7 @@ const NoteList: React.FC<NoteListProps> = ({
           {activeCategory === 'Trash' ? (
             <div>
               <h2 className="text-xl font-semibold mb-4 text-center">Trash</h2>
-              <button
-                onClick={onEmptyTrash}
-                className="w-full flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200"
-              >
+              <button onClick={onEmptyTrash} className="w-full flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">
                 <Eraser className="mr-2" size={16} /> Empty Trash
               </button>
             </div>
@@ -86,49 +127,88 @@ const NoteList: React.FC<NoteListProps> = ({
             <>
               <div className="relative">
                 <Search className="absolute top-1/2 left-3 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  type="search"
-                  placeholder="Search notes..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <input type="search" placeholder="Search notes..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              <button
-                onClick={onNewNote}
-                className="mt-4 w-full flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200"
-              >
+              <button onClick={onNewNote} className="mt-4 w-full flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">
                 <Plus className="mr-2" size={16} /> New Note
               </button>
             </>
           )}
         </div>
-
+        
         {/* Notes */}
-        <div className="h-full overflow-y-auto">
+        <div className="flex-grow overflow-y-auto">
           {sortedNotes.length > 0 ? (
-            sortedNotes.map((note) => (
-              <div
-                key={note.id}
-                // Make the note draggable, but not if it's in the trash
-                draggable={!note.trashed}
-                onDragStart={(e) => handleDragStart(e, note.id)}
-                onClick={() => onSelectNote(note.id)}
-                className={`p-4 border-b border-gray-200 transition-colors duration-200 ${
-                  note.trashed ? 'opacity-60' : 'cursor-pointer hover:bg-sky-100'
-                } ${
-                  note.id === activeNoteId ? 'bg-sky-200' : ''
-                }`}
-              >
-                <h3 className="font-semibold truncate text-lg">{note.title || 'Untitled Note'}</h3>
-                <p className="text-gray-600 truncate text-sm">
-                  {note.body.substring(0, 50) || 'No additional text'}
-                </p>
-                <small className="text-gray-400 mt-2 block">
-                  {new Date(note.lastModified).toLocaleDateString("en-GB", {
-                    day: 'numeric', month: 'short', year: 'numeric',
-                  })}
-                </small>
-              </div>
-            ))
+            sortedNotes.map((note) => {
+              const noteCategory = note.categoryId ? categories.find(c => c.id === note.categoryId) : null;
+              const isEditing = editingNoteId === note.id;
+
+              return (
+                <div
+                  key={note.id}
+                  onMouseEnter={() => setHoveredNoteId(note.id)}
+                  onMouseLeave={() => setHoveredNoteId(null)}
+                  draggable={!note.trashed}
+                  onDragStart={(e) => handleDragStart(e, note.id)}
+                  className={`relative p-4 border-b border-gray-200 transition-colors duration-200 ${
+                    note.trashed ? 'opacity-60' : 'cursor-pointer hover:bg-sky-100'
+                  } ${
+                    note.id === activeNoteId ? 'bg-sky-200' : ''
+                  }`}
+                >
+                  <div onClick={() => !isEditing && onSelectNote(note.id)}>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editingNoteTitle}
+                        onChange={(e) => setEditingNoteTitle(e.target.value)}
+                        onBlur={handleRenameSubmit}
+                        onKeyDown={handleRenameKeyDown}
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full text-lg font-semibold bg-white outline-none border-b-2 border-blue-500 -m-1 p-1"
+                      />
+                    ) : (
+                      <h3 className="font-semibold truncate text-lg mb-1">{note.title || 'Untitled Note'}</h3>
+                    )}
+                    <p className="text-gray-600 truncate text-sm mb-2">
+                      {note.body.substring(0, 50) || 'No additional text'}
+                    </p>
+                    
+                    {/* INDICATOR SECTION */}
+                    <div className="flex items-center justify-between text-xs text-gray-400">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        {note.favorited && (
+                          <div className="flex items-center gap-1 text-yellow-500 flex-shrink-0" title="Favorite">
+                            <Star size={14} fill="currentColor" />
+                          </div>
+                        )}
+                        {noteCategory && (
+                          <div className="flex items-center gap-1 px-2 py-0.5 bg-gray-200 text-gray-600 rounded-full" title={`Category: ${noteCategory.name}`}>
+                            <span className="truncate max-w-[100px]">{noteCategory.name}</span>
+                          </div>
+                        )}
+                      </div>
+                      <small className="flex-shrink-0">
+                        {new Date(note.lastModified).toLocaleDateString("en-GB", {
+                          day: 'numeric', month: 'short',
+                        })}
+                      </small>
+                    </div>
+                  </div>
+
+                  {/* 3-Dot Menu Button */}
+                  {hoveredNoteId === note.id && !isEditing && (
+                    <button
+                      onClick={(e) => handleMenuClick(e, note)}
+                      className="absolute top-3 right-3 p-1 rounded-full hover:bg-gray-300"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                  )}
+                </div>
+              );
+            })
           ) : (
             <div className="p-8 text-center text-gray-500">
               {activeCategory === 'Trash' ? 'Trash is empty.' : 'No notes in this category.'}
@@ -137,11 +217,44 @@ const NoteList: React.FC<NoteListProps> = ({
         </div>
       </div>
       
-      {/* The draggable resize handle */}
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className="absolute z-10 bg-white shadow-lg rounded-md py-1 w-48 border border-gray-200"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              setEditingNoteId(contextMenu.note.id);
+              setEditingNoteTitle(contextMenu.note.title);
+              closeContextMenu();
+            }}
+            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+          >
+            <Edit size={14} className="mr-2" /> Rename
+          </button>
+          <button
+            onClick={() => {
+              if (contextMenu.note.trashed) {
+                onPermanentlyDelete(contextMenu.note.id);
+              } else {
+                onDeleteNote(contextMenu.note.id);
+              }
+              closeContextMenu();
+            }}
+            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
+          >
+            <Trash2 size={14} className="mr-2" /> {contextMenu.note.trashed ? 'Delete Permanently' : 'Move to Trash'}
+          </button>
+        </div>
+      )}
+
+      {/* Resize Handle */}
       <div
         role="separator"
         aria-orientation="vertical"
-        className="absolute top-0 right-0 h-full w-2 cursor-col-resize bg-gray-300 hover:bg-blue-500 transition-colors duration-200"
+        className="absolute top-0 right-0 h-full w-2 cursor-col-resize bg-gray-300 hover:bg-blue-500"
         onMouseDown={handleMouseDown}
       />
     </div>
