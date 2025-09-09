@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, {useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import Sidebar, {type Category } from './components/Sidebar';
+import Sidebar, { type Filter } from './components/Sidebar';
 import NoteList from './components/NoteList';
 import NoteEditor from './components/NoteEditor';
 import type { Note } from './types/note';
+import type { Category } from './types/category';
 
 function App() {
-  // State for all notes, initialized from localStorage
+  // --- STATE MANAGEMENT ---
+
   const [notes, setNotes] = useState<Note[]>(() => {
     try {
       const savedNotes = localStorage.getItem('notes');
@@ -17,35 +19,58 @@ function App() {
     }
   });
 
-  // State for the currently selected note ID
-  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
-  
-  // State for the currently selected category (e.g., 'Notes', 'Trash')
-  const [activeCategory, setActiveCategory] = useState<Category>('Notes');
+  const [categories, setCategories] = useState<Category[]>(() => {
+    try {
+      const savedCategories = localStorage.getItem('categories');
+      return savedCategories ? JSON.parse(savedCategories) : [];
+    } catch (error) {
+      console.error("Failed to parse categories from localStorage", error);
+      return [];
+    }
+  });
 
-  // Effect to save notes to localStorage whenever they change
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<Filter>('Notes');
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+
+  // --- EFFECTS ---
+
   useEffect(() => {
     localStorage.setItem('notes', JSON.stringify(notes));
   }, [notes]);
 
-  // Derived state: Filter notes based on the active category using useMemo for performance
+  useEffect(() => {
+    localStorage.setItem('categories', JSON.stringify(categories));
+  }, [categories]);
+
+  // --- DERIVED STATE & LOGIC ---
+
   const filteredNotes = useMemo(() => {
-    switch (activeCategory) {
+    let notesToFilter: Note[];
+
+    switch (activeFilter) {
       case 'Favorites':
-        return notes.filter((note) => note.favorited && !note.trashed);
+        notesToFilter = notes.filter((note) => note.favorited && !note.trashed);
+        break;
       case 'Trash':
-        return notes.filter((note) => note.trashed);
+        notesToFilter = notes.filter((note) => note.trashed);
+        break;
       case 'Notes':
       default:
-        return notes.filter((note) => !note.trashed);
+        notesToFilter = notes.filter((note) => !note.trashed);
+        break;
     }
-  }, [notes, activeCategory]);
+
+    if (activeCategoryId) {
+      return notesToFilter.filter(note => note.categoryId === activeCategoryId);
+    }
+    
+    return notesToFilter;
+  }, [notes, activeFilter, activeCategoryId]);
   
-  // Effect to adjust the active note if it's no longer visible in the current filtered list
   useEffect(() => {
     const activeNoteIsVisible = filteredNotes.some(note => note.id === activeNoteId);
     if (!activeNoteIsVisible) {
-      // If the active note disappears, select the first note in the new list, or null if empty
       setActiveNoteId(filteredNotes.length > 0 ? filteredNotes[0].id : null);
     }
   }, [filteredNotes, activeNoteId]);
@@ -60,83 +85,125 @@ function App() {
       lastModified: Date.now(),
       favorited: false,
       trashed: false,
+      categoryId: activeCategoryId,
     };
     setNotes([newNote, ...notes]);
-    setActiveCategory('Notes'); // Switch to the 'Notes' view to see the new note
+    setActiveFilter('Notes');
     setActiveNoteId(newNote.id);
   };
-
+  
   const handleUpdateNote = (updatedNote: Note) => {
-    const updatedNotesArray = notes.map((note) =>
-      note.id === updatedNote.id ? updatedNote : note
-    );
-    setNotes(updatedNotesArray);
+    setNotes(notes.map((note) => (note.id === updatedNote.id ? updatedNote : note)));
+  };
+  
+  const handleNewCategory = () => {
+    const categoryName = prompt("Enter new category name:");
+    if (categoryName && categoryName.trim() !== "") {
+      const newCategory: Category = { id: uuidv4(), name: categoryName.trim() };
+      setCategories([...categories, newCategory]);
+      setActiveCategoryId(newCategory.id);
+      setActiveFilter('Notes');
+    }
+  };
+  
+  const handleSelectFilter = (filter: Filter) => {
+    setActiveFilter(filter);
+    setActiveCategoryId(null);
   };
 
-  const setNoteProperty = (id: string, property: keyof Note, value: boolean) => {
+  const handleSelectCategory = (categoryId: string | null) => {
+    setActiveCategoryId(categoryId);
+    setActiveFilter('Notes');
+  };
+
+  const handleAssignCategory = (noteId: string, categoryId: string | null) => {
     setNotes(notes.map(note => 
-      note.id === id ? { ...note, [property]: value, lastModified: Date.now() } : note
+      note.id === noteId ? { ...note, categoryId, lastModified: Date.now() } : note
     ));
   };
-
+  
   const handleToggleFavorite = (id: string) => {
     const note = notes.find(n => n.id === id);
     if (note) {
-      setNoteProperty(id, 'favorited', !note.favorited);
+      setNotes(notes.map(n => n.id === id ? { ...n, favorited: !n.favorited } : n));
     }
   };
 
-  const handleDeleteNote = (id: string) => setNoteProperty(id, 'trashed', true);
-  const handleRestoreNote = (id: string) => setNoteProperty(id, 'trashed', false);
+  const handleDeleteNote = (id: string) => {
+    setNotes(notes.map(n => n.id === id ? { ...n, trashed: true } : n));
+  };
+  
+  const handleRestoreNote = (id: string) => {
+    setNotes(notes.map(n => n.id === id ? { ...n, trashed: false } : n));
+  };
 
   const handleEmptyTrash = () => {
     const trashedCount = notes.filter(note => note.trashed).length;
-    if (trashedCount === 0) {
-      alert("The trash is already empty.");
-      return;
-    }
-    
-    if (window.confirm(`Are you sure you want to permanently delete ${trashedCount} note(s)? This action cannot be undone.`)) {
+    if (trashedCount === 0) return alert("The trash is already empty.");
+    if (window.confirm(`Are you sure you want to permanently delete ${trashedCount} note(s)?`)) {
       setNotes(notes.filter(note => !note.trashed));
     }
   };
 
   const handlePermanentlyDeleteNote = (id: string) => {
-    const noteToDelete = notes.find(note => note.id === id);
-    const noteTitle = noteToDelete ? `"${noteToDelete.title}"` : "this note";
-
-    if (window.confirm(`Are you sure you want to permanently delete ${noteTitle}? This action cannot be undone.`)) {
+    if (window.confirm(`Are you sure you want to permanently delete this note?`)) {
       setNotes(notes.filter(note => note.id !== id));
     }
   };
 
-  // Derived state: Get the full object for the currently active note
+  const handleRenameCategory = (categoryId: string, newName: string) => {
+    if (newName && newName.trim() !== "") {
+      setCategories(categories.map(category => 
+        category.id === categoryId ? { ...category, name: newName.trim() } : category
+      ));
+    }
+  };
+
+  const handleDeleteCategory = (categoryId: string) => {
+    const categoryToDelete = categories.find(c => c.id === categoryId);
+    if (!categoryToDelete) return;
+
+    if (window.confirm(`Are you sure you want to delete the category "${categoryToDelete.name}"? Notes in this category will become uncategorized.`)) {
+      setNotes(notes.map(note => 
+        note.categoryId === categoryId ? { ...note, categoryId: null } : note
+      ));
+      setCategories(categories.filter(category => category.id !== categoryId));
+      if (activeCategoryId === categoryId) {
+        setActiveCategoryId(null);
+      }
+    }
+  };
+
   const activeNote = notes.find((note) => note.id === activeNoteId);
 
   return (
     <div className="App bg-gray-50 min-h-screen flex text-gray-900 overflow-hidden">
-      {/* Resizable Sidebar Panel */}
-       <Sidebar
-        activeCategory={activeCategory}
-        setActiveCategory={setActiveCategory}
+      <Sidebar
+        activeFilter={activeFilter}
+        onSelectFilter={handleSelectFilter}
+        categories={categories}
+        onNewCategory={handleNewCategory}
+        activeCategoryId={activeCategoryId}
+        onSelectCategory={handleSelectCategory}
+        onAssignCategory={handleAssignCategory}
+        onRenameCategory={handleRenameCategory}
+        onDeleteCategory={handleDeleteCategory}
         initialWidth={256}
         minWidth={200}
+        maxWidth={400}
       />
-      
       <main className="flex flex-grow">
-        {/* Resizable Note List Panel */}
         <NoteList
           notes={filteredNotes}
           onSelectNote={setActiveNoteId}
           onNewNote={handleNewNote}
           activeNoteId={activeNoteId}
-          activeCategory={activeCategory}
+          activeCategory={activeFilter}
           onEmptyTrash={handleEmptyTrash}
           initialWidth={350}
           minWidth={250}
+          maxWidth={600}
         />
-        
-        {/* Note Editor fills the remaining space automatically */}
         <NoteEditor
           activeNote={activeNote}
           onUpdateNote={handleUpdateNote}
@@ -151,4 +218,3 @@ function App() {
 }
 
 export default App;
-// App.tsx full version with latest changes

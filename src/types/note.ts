@@ -5,4 +5,5 @@ export interface Note {
   lastModified: number;
   favorited: boolean;
   trashed: boolean;
+  categoryId: string | null; 
 }

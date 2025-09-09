@@ -1,18 +1,25 @@
 import React from 'react';
 import type { Note } from '../types/note';
-
 import { Star, Trash2, Undo2, Info } from 'lucide-react';
 
+// Props are simplified, no longer needs category info
 interface NoteEditorProps {
   activeNote: Note | undefined;
   onUpdateNote: (updatedNote: Note) => void;
-  onDeleteNote: (id: string) => void; // Moves to trash
-  onRestoreNote: (id: string) => void; // Restores from trash
+  onDeleteNote: (id: string) => void;
+  onRestoreNote: (id: string) => void;
   onToggleFavorite: (id: string) => void;
   onPermanentlyDelete: (id: string) => void;
 }
 
-const NoteEditor: React.FC<NoteEditorProps> = ({ activeNote, onUpdateNote, onDeleteNote, onRestoreNote, onToggleFavorite, onPermanentlyDelete }) => {
+const NoteEditor: React.FC<NoteEditorProps> = ({
+  activeNote,
+  onUpdateNote,
+  onDeleteNote,
+  onRestoreNote,
+  onToggleFavorite,
+  onPermanentlyDelete,
+}) => {
   if (!activeNote) {
     return (
       <div className="flex-grow flex items-center justify-center bg-white text-gray-400 text-2xl">
@@ -33,58 +40,38 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ activeNote, onUpdateNote, onDel
 
   return (
     <div className="flex-grow flex flex-col bg-white">
-      {/* Editor Toolbar */}
-      <div className="p-3 border-b border-gray-300 flex items-center justify-end space-x-4 bg-gray-50 flex-shrink-0">
-        <button
-          onClick={() => onToggleFavorite(activeNote.id)}
-          title={activeNote.favorited ? "Unfavorite" : "Favorite"}
-          className="text-gray-600 hover:text-yellow-500 transition-colors duration-200"
-        >
-          <Star
-            size={20}
-            className={activeNote.favorited ? 'text-yellow-500' : ''}
-            fill={activeNote.favorited ? 'currentColor' : 'none'}
-          />
-        </button>
-        
-        {isTrashed ? (
-          // --- NEW: Using a React Fragment to group the two trash-related buttons ---
-          <>
-            <button 
-              onClick={() => onRestoreNote(activeNote.id)} 
-              title="Restore" 
-              className="text-gray-600 hover:text-blue-500 transition-colors duration-200"
-            >
-              <Undo2 size={20} />
-            </button>
-            <button 
-              onClick={() => onPermanentlyDelete(activeNote.id)} 
-              title="Permanently Delete" 
-              className="text-gray-600 hover:text-red-600 transition-colors duration-200"
-            >
-              <Trash2 size={20} />
-            </button>
-          </>
-        ) : (
-          <button 
-            onClick={() => onDeleteNote(activeNote.id)} 
-            title="Move to Trash" 
-            className="text-gray-600 hover:text-red-500 transition-colors duration-200"
+      {/* Editor Toolbar - Simplified */}
+      <div className="p-3 border-b border-gray-300 flex items-center justify-end bg-gray-50 flex-shrink-0">
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={() => onToggleFavorite(activeNote.id)}
+            title={activeNote.favorited ? "Unfavorite" : "Favorite"}
+            className="text-gray-600 hover:text-yellow-500 transition-colors duration-200"
           >
-            <Trash2 size={20} />
+            <Star
+              size={20}
+              className={activeNote.favorited ? 'text-yellow-500' : ''}
+              fill={activeNote.favorited ? 'currentColor' : 'none'}
+            />
           </button>
-        )}
-        
-        <button title="Note Info" className="text-gray-600 hover:text-blue-500 transition-colors duration-200">
-          <Info size={20} />
-        </button>
+          
+          {isTrashed ? (
+            <>
+              <button onClick={() => onRestoreNote(activeNote.id)} title="Restore" className="text-gray-600 hover:text-blue-500"><Undo2 size={20} /></button>
+              <button onClick={() => onPermanentlyDelete(activeNote.id)} title="Permanently Delete" className="text-gray-600 hover:text-red-600"><Trash2 size={20} /></button>
+            </>
+          ) : (
+            <button onClick={() => onDeleteNote(activeNote.id)} title="Move to Trash" className="text-gray-600 hover:text-red-500"><Trash2 size={20} /></button>
+          )}
+          
+          <button title="Note Info" className="text-gray-600 hover:text-blue-500"><Info size={20} /></button>
+        </div>
       </div>
-
-      {/* Editor Fields */}
+      
+      {/* Editor Fields - Unchanged */}
       <div className="p-6 flex-grow flex flex-col">
         <input
           type="text"
-          id="title"
           value={activeNote.title}
           onChange={(e) => onEditField('title', e.target.value)}
           className="text-3xl font-bold p-2 focus:outline-none mb-4 bg-transparent disabled:bg-gray-100"
@@ -93,7 +80,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ activeNote, onUpdateNote, onDel
           disabled={isTrashed}
         />
         <textarea
-          id="body"
           placeholder="Start writing..."
           value={activeNote.body}
           onChange={(e) => onEditField('body', e.target.value)}

@@ -1,19 +1,18 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { Note } from '../types/note';
-import type { Category } from './Sidebar';
+import type { Filter } from './Sidebar'; // This type is now defined in Sidebar.tsx
 import { Plus, Search, Eraser } from 'lucide-react';
 
-// Add maxWidth to the component's props interface
 interface NoteListProps {
   notes: Note[];
   onSelectNote: (id: string) => void;
   onNewNote: () => void;
   activeNoteId: string | null;
-  activeCategory: Category;
+  activeCategory: Filter; // This prop receives the active filter ('Notes', 'Trash', etc.)
   onEmptyTrash: () => void;
   initialWidth: number;
   minWidth?: number;
-  maxWidth?: number; // New optional prop
+  maxWidth?: number;
 }
 
 const NoteList: React.FC<NoteListProps> = ({
@@ -25,8 +24,9 @@ const NoteList: React.FC<NoteListProps> = ({
   onEmptyTrash,
   initialWidth,
   minWidth = 250,
-  maxWidth = 600, // Set a default max width
+  maxWidth = 600,
 }) => {
+  // --- RESIZING LOGIC ---
   const [width, setWidth] = useState(initialWidth);
   const isResizing = useRef(false);
 
@@ -35,16 +35,11 @@ const NoteList: React.FC<NoteListProps> = ({
     isResizing.current = true;
   };
 
-  // Update the mouse move handler to respect the maxWidth
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (isResizing.current) {
-      setWidth((prevWidth) => {
-        const newWidth = prevWidth + e.movementX;
-        // Clamp the new width between the min and max values
-        return Math.max(minWidth, Math.min(newWidth, maxWidth));
-      });
+      setWidth((prevWidth) => Math.max(minWidth, Math.min(prevWidth + e.movementX, maxWidth)));
     }
-  }, [minWidth, maxWidth]); // Add maxWidth to the dependency array
+  }, [minWidth, maxWidth]);
 
   const handleMouseUp = useCallback(() => {
     isResizing.current = false;
@@ -58,6 +53,14 @@ const NoteList: React.FC<NoteListProps> = ({
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [handleMouseMove, handleMouseUp]);
+  // --- END RESIZING LOGIC ---
+
+  // --- DRAG-AND-DROP LOGIC ---
+  const handleDragStart = (e: React.DragEvent, noteId: string) => {
+    // This sets the data that will be available when the item is dropped
+    e.dataTransfer.setData("noteId", noteId);
+  };
+  // --- END DRAG-AND-DROP LOGIC ---
 
   const sortedNotes = [...notes].sort((a, b) => b.lastModified - a.lastModified);
 
@@ -67,7 +70,7 @@ const NoteList: React.FC<NoteListProps> = ({
       style={{ width: `${width}px` }}
     >
       <div className="h-full overflow-hidden flex flex-col">
-        {/* Note List Header - (No changes here) */}
+        {/* Note List Header */}
         <div className="p-4 bg-white border-b border-gray-300 shadow-sm flex-shrink-0">
           {activeCategory === 'Trash' ? (
             <div>
@@ -99,16 +102,21 @@ const NoteList: React.FC<NoteListProps> = ({
           )}
         </div>
 
-        {/* Notes list - (No changes here) */}
+        {/* Notes */}
         <div className="h-full overflow-y-auto">
           {sortedNotes.length > 0 ? (
             sortedNotes.map((note) => (
               <div
                 key={note.id}
-                className={`p-4 cursor-pointer border-b border-gray-200 hover:bg-sky-100 transition-colors duration-200 ${
+                // Make the note draggable, but not if it's in the trash
+                draggable={!note.trashed}
+                onDragStart={(e) => handleDragStart(e, note.id)}
+                onClick={() => onSelectNote(note.id)}
+                className={`p-4 border-b border-gray-200 transition-colors duration-200 ${
+                  note.trashed ? 'opacity-60' : 'cursor-pointer hover:bg-sky-100'
+                } ${
                   note.id === activeNoteId ? 'bg-sky-200' : ''
                 }`}
-                onClick={() => onSelectNote(note.id)}
               >
                 <h3 className="font-semibold truncate text-lg">{note.title || 'Untitled Note'}</h3>
                 <p className="text-gray-600 truncate text-sm">
@@ -129,6 +137,7 @@ const NoteList: React.FC<NoteListProps> = ({
         </div>
       </div>
       
+      {/* The draggable resize handle */}
       <div
         role="separator"
         aria-orientation="vertical"
