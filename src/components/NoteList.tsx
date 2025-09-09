@@ -50,6 +50,7 @@ const NoteList: React.FC<NoteListProps> = ({
   const [hoveredNoteId, setHoveredNoteId] = useState<string | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteTitle, setEditingNoteTitle] = useState<string>("");
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // --- HANDLERS ---
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -67,8 +68,18 @@ const NoteList: React.FC<NoteListProps> = ({
   const handleMenuClick = (e: React.MouseEvent, note: Note) => {
     e.stopPropagation();
     e.preventDefault();
-    const rect = e.currentTarget.getBoundingClientRect();
-    setContextMenu({ visible: true, x: rect.left, y: rect.bottom, note });
+    
+    // Guard clause in case the ref isn't attached yet
+    if (!containerRef.current) return;
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const buttonRect = e.currentTarget.getBoundingClientRect();
+
+    // Calculate position relative to the container, not the window
+    const x = buttonRect.left - containerRect.left;
+    const y = buttonRect.bottom - containerRect.top;
+
+    setContextMenu({ visible: true, x, y, note });
   };
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
@@ -110,6 +121,7 @@ const NoteList: React.FC<NoteListProps> = ({
 
   return (
     <div
+     ref={containerRef}
       className="relative flex-shrink-0 bg-gray-100 border-r border-gray-300 flex flex-col"
       style={{ width: `${width}px` }}
     >
