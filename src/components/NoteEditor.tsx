@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Note } from '../types/note';
-// Import icons from lucide-react
+
 import { Star, Trash2, Undo2, Info } from 'lucide-react';
 
 interface NoteEditorProps {
@@ -9,9 +9,10 @@ interface NoteEditorProps {
   onDeleteNote: (id: string) => void; // Moves to trash
   onRestoreNote: (id: string) => void; // Restores from trash
   onToggleFavorite: (id: string) => void;
+  onPermanentlyDelete: (id: string) => void;
 }
 
-const NoteEditor: React.FC<NoteEditorProps> = ({ activeNote, onUpdateNote, onDeleteNote, onRestoreNote, onToggleFavorite }) => {
+const NoteEditor: React.FC<NoteEditorProps> = ({ activeNote, onUpdateNote, onDeleteNote, onRestoreNote, onToggleFavorite, onPermanentlyDelete }) => {
   if (!activeNote) {
     return (
       <div className="flex-grow flex items-center justify-center bg-white text-gray-400 text-2xl">
@@ -47,11 +48,29 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ activeNote, onUpdateNote, onDel
         </button>
         
         {isTrashed ? (
-          <button onClick={() => onRestoreNote(activeNote.id)} title="Restore" className="text-gray-600 hover:text-blue-500 transition-colors duration-200">
-            <Undo2 size={20} />
-          </button>
+          // --- NEW: Using a React Fragment to group the two trash-related buttons ---
+          <>
+            <button 
+              onClick={() => onRestoreNote(activeNote.id)} 
+              title="Restore" 
+              className="text-gray-600 hover:text-blue-500 transition-colors duration-200"
+            >
+              <Undo2 size={20} />
+            </button>
+            <button 
+              onClick={() => onPermanentlyDelete(activeNote.id)} 
+              title="Permanently Delete" 
+              className="text-gray-600 hover:text-red-600 transition-colors duration-200"
+            >
+              <Trash2 size={20} />
+            </button>
+          </>
         ) : (
-          <button onClick={() => onDeleteNote(activeNote.id)} title="Move to Trash" className="text-gray-600 hover:text-red-500 transition-colors duration-200">
+          <button 
+            onClick={() => onDeleteNote(activeNote.id)} 
+            title="Move to Trash" 
+            className="text-gray-600 hover:text-red-500 transition-colors duration-200"
+          >
             <Trash2 size={20} />
           </button>
         )}
