@@ -237,6 +237,8 @@ function App() {
           onUpdateNote={handleUpdateNote}
           onDeleteNote={handleDeleteNote}
           onPermanentlyDelete={handlePermanentlyDeleteNote}
+          onToggleFavorite={handleToggleFavorite}
+          onAssignCategory={handleAssignCategory}
         />
         <NoteEditor
           activeNote={activeNote}

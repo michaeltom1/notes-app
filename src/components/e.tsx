@@ -13,7 +13,6 @@ import {
   FolderPlus,
   FolderMinus,
 } from "lucide-react";
-
 // State type for the context menu
 type ContextMenu = {
   visible: boolean;
@@ -75,8 +74,8 @@ const NoteList: React.FC<NoteListProps> = ({
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       if (isResizing.current) {
-        setWidth((w) =>
-          Math.max(minWidth, Math.min(w + e.movementX, maxWidth))
+        setWidth((prevWidth) =>
+          Math.max(minWidth, Math.min(prevWidth + e.movementX, maxWidth))
         );
       }
     },
@@ -88,25 +87,15 @@ const NoteList: React.FC<NoteListProps> = ({
   const handleDragStart = (e: React.DragEvent, noteId: string) =>
     e.dataTransfer.setData("noteId", noteId);
 
-  const handleMenuClick = (e: React.MouseEvent, note: Note) => {
-    e.stopPropagation();
-    e.preventDefault();
+ const handleMenuClick = (e: React.MouseEvent, note: Note) => {
+    e.stopPropagation(); e.preventDefault();
     if (!containerRef.current) return;
     const containerRect = containerRef.current.getBoundingClientRect();
     const buttonRect = e.currentTarget.getBoundingClientRect();
-    setContextMenu({
-      visible: true,
-      x: buttonRect.left - containerRect.left,
-      y: buttonRect.bottom - containerRect.top,
-      note,
-    });
+    setContextMenu({ visible: true, x: buttonRect.left - containerRect.left, y: buttonRect.bottom - containerRect.top, note });
   };
 
-  const closeContextMenu = useCallback(() => {
-    setContextMenu(null);
-    setSubmenuVisible(false);
-  }, []);
-
+  const closeContextMenu = useCallback(() => { setContextMenu(null); setSubmenuVisible(false); }, []);
   const handleRenameSubmit = () => {
     if (!editingNoteId) return;
     const noteToUpdate = notes.find((n) => n.id === editingNoteId);
@@ -286,87 +275,99 @@ const NoteList: React.FC<NoteListProps> = ({
       </div>
 
       {/* Context Menu */}
-     {contextMenu && (
+      {contextMenu && (
         <div
           style={{ top: contextMenu.y, left: contextMenu.x }}
-          className="absolute z-10 bg-white shadow-lg rounded-md py-1 w-52 border border-gray-200 animate-fade-in-fast" // Added a subtle animation class (optional)
+          className="absolute z-10 bg-white shadow-lg rounded-md py-1 w-52 border border-gray-200"
           onClick={(e) => e.stopPropagation()}
-          onMouseLeave={() => setSubmenuVisible(false)}
+          onMouseLeave={() => setSubmenuVisible(false)} // Hide submenu when leaving the main menu
         >
-          {/* Base styles are now defined once and applied via a variable for consistency */}
-          {[
-            {
-              label: 'Rename',
-              icon: <Edit size={14} className="mr-3" />,
-              action: () => {
-                setEditingNoteId(contextMenu.note.id);
-                setEditingNoteTitle(contextMenu.note.title);
-                closeContextMenu();
-              },
-              style: 'text-gray-700 hover:bg-gray-100',
-            },
-            {
-              label: contextMenu.note.favorited ? 'Unfavorite' : 'Mark as Favorite',
-              icon: <Star size={14} className="mr-3" />,
-              action: () => {
-                onToggleFavorite(contextMenu.note.id);
-                closeContextMenu();
-              },
-              style: 'text-gray-700 hover:bg-gray-100',
-            },
-          ].map(item => (
-            <button key={item.label} onClick={item.action} className={`w-full text-left px-3 py-2 text-sm flex items-center transition-colors duration-150 ${item.style}`}>
-              {item.icon}{item.label}
-            </button>
-          ))}
+          {/* Rename */}
+          <button
+            onClick={() => {
+              setEditingNoteId(contextMenu.note.id);
+              setEditingNoteTitle(contextMenu.note.title);
+              closeContextMenu();
+            }}
+            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+          >
+            <Edit size={14} className="mr-2" /> Rename
+          </button>
 
-          <div className="border-t my-1 border-gray-100"></div>
+          {/* Favorite/Unfavorite */}
+          <button
+            onClick={() => {
+              onToggleFavorite(contextMenu.note.id);
+              closeContextMenu();
+            }}
+            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+          >
+            <Star size={14} className="mr-2" />{" "}
+            {contextMenu.note.favorited ? "Unfavorite" : "Mark as Favorite"}
+          </button>
+
+          {/* Category Options */}
+          <div className="border-t my-1"></div>
 
           {contextMenu.note.categoryId ? (
+            // Option to REMOVE from category
             <button
-              onClick={() => { onAssignCategory(contextMenu.note.id, null); closeContextMenu(); }}
-              className="w-full text-left px-3 py-2 text-sm flex items-center text-gray-700 hover:bg-gray-100 transition-colors duration-150"
+              onClick={() => {
+                onAssignCategory(contextMenu.note.id, null);
+                closeContextMenu();
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
             >
-              <FolderMinus size={14} className="mr-3" /> Remove from Category
+              <FolderMinus size={14} className="mr-2" /> Remove from Category
             </button>
           ) : (
-            <div 
+            // Option to MOVE TO a category (with submenu)
+            <div
               className="relative"
               onMouseEnter={() => setSubmenuVisible(true)}
             >
-              <div className="flex items-center justify-between text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-default">
+              <div className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center justify-between">
                 <div className="flex items-center">
-                  <FolderPlus size={14} className="mr-3" /> Move to Category
+                  <FolderPlus size={14} className="mr-2" /> Move to Category
                 </div>
-                <span className="text-xs text-gray-400">&#9656;</span>
+                <span>&#9656;</span> {/* Right arrow character */}
               </div>
-              {submenuVisible && (
-                <div className="absolute left-full -top-1 ml-2 bg-white shadow-lg rounded-md py-1 w-48 border border-gray-200 animate-fade-in-fast">
-                  {categories.length > 0 ? categories.map(category => (
+
+              {/* Category Submenu */}
+              {submenuVisible && categories.length > 0 && (
+                <div className="absolute left-full -top-1 bg-white shadow-lg rounded-md py-1 w-48 border border-gray-200">
+                  {categories.map((category) => (
                     <button
                       key={category.id}
-                      onClick={() => { onAssignCategory(contextMenu.note.id, category.id); closeContextMenu(); }}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150"
+                      onClick={() => {
+                        onAssignCategory(contextMenu.note.id, category.id);
+                        closeContextMenu();
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
                       {category.name}
                     </button>
-                  )) : <div className="px-3 py-2 text-sm text-gray-400">No categories</div>}
+                  ))}
                 </div>
               )}
             </div>
           )}
 
-          <div className="border-t my-1 border-gray-100"></div>
-          
+          {/* Delete Options */}
+          <div className="border-t my-1"></div>
           <button
             onClick={() => {
-              if (contextMenu.note.trashed) { onPermanentlyDelete(contextMenu.note.id); }
-              else { onDeleteNote(contextMenu.note.id); }
+              if (contextMenu.note.trashed) {
+                onPermanentlyDelete(contextMenu.note.id);
+              } else {
+                onDeleteNote(contextMenu.note.id);
+              }
               closeContextMenu();
             }}
-            className="w-full text-left px-3 py-2 text-sm flex items-center text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors duration-150"
+            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
           >
-            <Trash2 size={14} className="mr-3" /> {contextMenu.note.trashed ? 'Delete Permanently' : 'Move to Trash'}
+            <Trash2 size={14} className="mr-2" />{" "}
+            {contextMenu.note.trashed ? "Delete Permanently" : "Move to Trash"}
           </button>
         </div>
       )}
@@ -379,12 +380,6 @@ const NoteList: React.FC<NoteListProps> = ({
         onMouseDown={handleMouseDown}
       />
     </div>
-     
-
-
-
-
-
   );
 };
 
