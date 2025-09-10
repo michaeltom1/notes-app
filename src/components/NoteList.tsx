@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import type { Note } from "../types/note";
-import type { Filter } from "./Sidebar";
-import type { Category } from "../types/category";
+// import type { Filter } from "./Sidebar";
+// import type { Category } from "../types/category";
 import {
   Plus,
   Search,
@@ -14,6 +14,14 @@ import {
   FolderMinus,
   Undo2,
 } from "lucide-react";
+import { useAppContext } from "../context/AppContext"; // Import the custom hook
+
+// The props interface is now minimal, only for layout/initialization
+interface NoteListProps {
+  initialWidth: number;
+  minWidth?: number;
+  maxWidth?: number;
+}
 
 // State type for the context menu
 type ContextMenu = {
@@ -23,44 +31,22 @@ type ContextMenu = {
   note: Note;
 } | null;
 
-interface NoteListProps {
-  notes: Note[];
-  onSelectNote: (id: string) => void;
-  onNewNote: () => void;
-  activeNoteId: string | null;
-  activeCategory: Filter;
-  onEmptyTrash: () => void;
-  initialWidth: number;
-  minWidth?: number;
-  maxWidth?: number;
-  categories: Category[];
-  onUpdateNote: (updatedNote: Note) => void;
-  onDeleteNote: (id: string) => void;
-  onPermanentlyDelete: (id: string) => void;
-  onToggleFavorite: (id: string) => void;
-  onAssignCategory: (noteId: string, categoryId: string | null) => void;
-   onRestoreNote: (id: string) => void;
-}
-
 const NoteList: React.FC<NoteListProps> = ({
-  notes,
-  onSelectNote,
-  onNewNote,
-  activeNoteId,
-  activeCategory,
-  onEmptyTrash,
   initialWidth,
   minWidth = 250,
   maxWidth = 600,
-  categories,
-  onUpdateNote,
-  onDeleteNote,
-  onPermanentlyDelete,
-  onToggleFavorite,
-  onAssignCategory,
-   onRestoreNote
 }) => {
-  // --- STATE MANAGEMENT ---
+  // --- STATE & CONTEXT ---
+  // All global state and actions are now pulled from the context
+  const {
+    filteredNotes: notes, // Rename for local clarity
+    activeNoteId,
+    activeFilter,
+    categories,
+    actions,
+  } = useAppContext();
+
+  // Internal UI state for this component
   const [width, setWidth] = useState(initialWidth);
   const isResizing = useRef(false);
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
@@ -69,6 +55,7 @@ const NoteList: React.FC<NoteListProps> = ({
   const [editingNoteTitle, setEditingNoteTitle] = useState<string>("");
   const [submenuVisible, setSubmenuVisible] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const submenuTimerRef = useRef<number | null>(null);
 
   // --- HANDLERS ---
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -114,7 +101,10 @@ const NoteList: React.FC<NoteListProps> = ({
     if (!editingNoteId) return;
     const noteToUpdate = notes.find((n) => n.id === editingNoteId);
     if (noteToUpdate && editingNoteTitle.trim() !== "") {
-      onUpdateNote({ ...noteToUpdate, title: editingNoteTitle.trim() });
+      actions.handleUpdateNote({
+        ...noteToUpdate,
+        title: editingNoteTitle.trim(),
+      });
     }
     setEditingNoteId(null);
     setEditingNoteTitle("");
@@ -125,6 +115,22 @@ const NoteList: React.FC<NoteListProps> = ({
     else if (e.key === "Escape") {
       setEditingNoteId(null);
       setEditingNoteTitle("");
+    }
+  };
+
+  const startCloseTimer = () => {
+    // Clear any existing timer to reset the delay
+    if (submenuTimerRef.current) {
+      clearTimeout(submenuTimerRef.current);
+    }
+    submenuTimerRef.current = setTimeout(() => {
+      setSubmenuVisible(false);
+    }, 200); // 200ms delay is usually a good value
+  };
+
+  const cancelCloseTimer = () => {
+    if (submenuTimerRef.current) {
+      clearTimeout(submenuTimerRef.current);
     }
   };
 
@@ -156,12 +162,12 @@ const NoteList: React.FC<NoteListProps> = ({
       <div className="h-full overflow-hidden flex flex-col">
         {/* Note List Header */}
         <div className="p-4 bg-white border-b border-gray-300 shadow-sm flex-shrink-0">
-          {activeCategory === "Trash" ? (
+          {activeFilter === "Trash" ? (
             <div>
               <h2 className="text-xl font-semibold mb-4 text-center">Trash</h2>
               {notes.length > 0 && (
                 <button
-                  onClick={onEmptyTrash}
+                  onClick={actions.handleEmptyTrash}
                   className="w-full flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200"
                 >
                   <Eraser className="mr-2" size={16} /> Empty Trash
@@ -182,8 +188,8 @@ const NoteList: React.FC<NoteListProps> = ({
                 />
               </div>
               <button
-                onClick={onNewNote}
-                className="mt-4 w-full flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg"
+                onClick={actions.handleNewNote}
+                className="mt-4 w-full flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200"
               >
                 <Plus className="mr-2" size={16} /> New Note
               </button>
@@ -213,7 +219,11 @@ const NoteList: React.FC<NoteListProps> = ({
                       : "cursor-pointer hover:bg-sky-100"
                   } ${note.id === activeNoteId ? "bg-sky-200" : ""}`}
                 >
-                  <div onClick={() => !isEditing && onSelectNote(note.id)}>
+                  <div
+                    onClick={() =>
+                      !isEditing && actions.setActiveNoteId(note.id)
+                    }
+                  >
                     {isEditing ? (
                       <input
                         type="text"
@@ -233,8 +243,6 @@ const NoteList: React.FC<NoteListProps> = ({
                     <p className="text-gray-600 truncate text-sm mb-2">
                       {note.body.substring(0, 50) || "No additional text"}
                     </p>
-
-                    {/* INDICATOR SECTION */}
                     <div className="flex items-center justify-between text-xs text-gray-400">
                       <div className="flex items-center gap-3 overflow-hidden">
                         {note.favorited && (
@@ -259,16 +267,11 @@ const NoteList: React.FC<NoteListProps> = ({
                       <small className="flex-shrink-0">
                         {new Date(note.lastModified).toLocaleDateString(
                           "en-GB",
-                          {
-                            day: "numeric",
-                            month: "short",
-                          }
+                          { day: "numeric", month: "short" }
                         )}
                       </small>
                     </div>
                   </div>
-
-                  {/* 3-Dot Menu Button */}
                   {hoveredNoteId === note.id && !isEditing && (
                     <button
                       onClick={(e) => handleMenuClick(e, note)}
@@ -282,7 +285,7 @@ const NoteList: React.FC<NoteListProps> = ({
             })
           ) : (
             <div className="p-8 text-center text-gray-500">
-              {activeCategory === "Trash"
+              {activeFilter === "Trash"
                 ? "Trash is empty."
                 : "No notes in this category."}
             </div>
@@ -296,14 +299,14 @@ const NoteList: React.FC<NoteListProps> = ({
           style={{ top: contextMenu.y, left: contextMenu.x }}
           className="absolute z-10 bg-white shadow-lg rounded-md py-1 w-52 border border-gray-200 animate-fade-in-fast"
           onClick={(e) => e.stopPropagation()}
-          onMouseLeave={() => setSubmenuVisible(false)}
+          // onMouseLeave={() => setSubmenuVisible(false)}
+          onMouseLeave={startCloseTimer}
         >
           {contextMenu.note.trashed ? (
-            // --- Simplified menu for notes in the trash ---
             <>
               <button
                 onClick={() => {
-                  onRestoreNote(contextMenu.note.id);
+                  actions.handleRestoreNote(contextMenu.note.id);
                   closeContextMenu();
                 }}
                 className="w-full text-left px-3 py-2 text-sm flex items-center text-gray-700 hover:bg-gray-100 transition-colors duration-150"
@@ -313,7 +316,7 @@ const NoteList: React.FC<NoteListProps> = ({
               <div className="border-t my-1 border-gray-100"></div>
               <button
                 onClick={() => {
-                  onPermanentlyDelete(contextMenu.note.id);
+                  actions.handlePermanentlyDeleteNote(contextMenu.note.id);
                   closeContextMenu();
                 }}
                 className="w-full text-left px-3 py-2 text-sm flex items-center text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors duration-150"
@@ -322,7 +325,6 @@ const NoteList: React.FC<NoteListProps> = ({
               </button>
             </>
           ) : (
-            // --- Full-featured menu for active notes ---
             <>
               <button
                 onClick={() => {
@@ -335,25 +337,34 @@ const NoteList: React.FC<NoteListProps> = ({
                 <Edit size={14} className="mr-3" /> Rename
               </button>
               <button
-                onClick={() => { onToggleFavorite(contextMenu.note.id); closeContextMenu(); }}
+                onClick={() => {
+                  actions.handleToggleFavorite(contextMenu.note.id);
+                  closeContextMenu();
+                }}
                 className="w-full text-left px-3 py-2 text-sm flex items-center text-gray-700 hover:bg-gray-100 transition-colors duration-150"
               >
-                <Star size={14} className="mr-3" /> {contextMenu.note.favorited ? 'Unfavorite' : 'Mark as Favorite'}
+                <Star size={14} className="mr-3" />{" "}
+                {contextMenu.note.favorited ? "Unfavorite" : "Mark as Favorite"}
               </button>
-              
               <div className="border-t my-1 border-gray-100"></div>
-
               {contextMenu.note.categoryId ? (
                 <button
-                  onClick={() => { onAssignCategory(contextMenu.note.id, null); closeContextMenu(); }}
+                  onClick={() => {
+                    actions.handleAssignCategory(contextMenu.note.id, null);
+                    closeContextMenu();
+                  }}
                   className="w-full text-left px-3 py-2 text-sm flex items-center text-gray-700 hover:bg-gray-100 transition-colors duration-150"
                 >
-                  <FolderMinus size={14} className="mr-3" /> Remove from Category
+                  <FolderMinus size={14} className="mr-3" /> Remove from
+                  Category
                 </button>
               ) : (
-                <div 
+                <div
                   className="relative"
-                  onMouseEnter={() => setSubmenuVisible(true)}
+                  onMouseEnter={() => {
+                    cancelCloseTimer();
+                    setSubmenuVisible(true);
+                  }}
                 >
                   <div className="flex items-center justify-between text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-default">
                     <div className="flex items-center">
@@ -363,24 +374,37 @@ const NoteList: React.FC<NoteListProps> = ({
                   </div>
                   {submenuVisible && (
                     <div className="absolute left-full -top-1 ml-2 bg-white shadow-lg rounded-md py-1 w-48 border border-gray-200 animate-fade-in-fast">
-                      {categories.length > 0 ? categories.map(category => (
-                        <button
-                          key={category.id}
-                          onClick={() => { onAssignCategory(contextMenu.note.id, category.id); closeContextMenu(); }}
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150"
-                        >
-                          {category.name}
-                        </button>
-                      )) : <div className="px-3 py-2 text-sm text-gray-400">No categories</div>}
+                      {categories.length > 0 ? (
+                        categories.map((category) => (
+                          <button
+                            key={category.id}
+                            onClick={() => {
+                              actions.handleAssignCategory(
+                                contextMenu.note.id,
+                                category.id
+                              );
+                              closeContextMenu();
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150"
+                          >
+                            {category.name}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-gray-400">
+                          No categories available
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
-
               <div className="border-t my-1 border-gray-100"></div>
-              
               <button
-                onClick={() => { onDeleteNote(contextMenu.note.id); closeContextMenu(); }}
+                onClick={() => {
+                  actions.handleDeleteNote(contextMenu.note.id);
+                  closeContextMenu();
+                }}
                 className="w-full text-left px-3 py-2 text-sm flex items-center text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors duration-150"
               >
                 <Trash2 size={14} className="mr-3" /> Move to Trash
@@ -393,9 +417,8 @@ const NoteList: React.FC<NoteListProps> = ({
       {/* Resize Handle */}
       <div
         role="separator"
-        aria-orientation="vertical"
-        className="absolute top-0 right-0 h-full w-0.5 cursor-col-resize bg-gray-300 hover:bg-blue-500"
         onMouseDown={handleMouseDown}
+        className="absolute top-0 right-0 h-full w-0.5 cursor-col-resize bg-gray-300 hover:bg-blue-500 transition-colors duration-200"
       />
     </div>
   );
