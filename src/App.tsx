@@ -239,6 +239,7 @@ function App() {
           onPermanentlyDelete={handlePermanentlyDeleteNote}
           onToggleFavorite={handleToggleFavorite}
           onAssignCategory={handleAssignCategory}
+          onRestoreNote={handleRestoreNote}
         />
         <NoteEditor
           activeNote={activeNote}
