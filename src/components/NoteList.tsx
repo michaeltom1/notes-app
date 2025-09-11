@@ -14,6 +14,7 @@ import {
   FolderMinus,
   Undo2,
 } from "lucide-react";
+// import { Star, Trash2, Undo2, Edit, Eye, ClipboardCopy, Download } from 'lucide-react';
 import { useAppContext } from "../context/AppContext"; // Import the custom hook
 
 // The props interface is now minimal, only for layout/initialization
